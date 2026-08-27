@@ -38,6 +38,11 @@ jobs:
     - name: Install dependencies
       run: npm i --ignore-scripts
 
+    # The HTTP servers run inside a Docker container (see lib/bench.js), not on
+    # the runner host. Host networking keeps the numbers free of bridge/NAT cost.
+    - name: Pull benchmark runner image
+      run: docker pull node:24
+
     - name: Run benchmarks
       run: npm start y 100 10 40
 

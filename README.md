@@ -57,6 +57,14 @@ Clone this repo. Then
 node ./benchmark [arguments (optional)]
 ```
 
+Each HTTP server under test is started inside a throwaway **Docker container**
+(image `node:24`, overridable with `BENCHMARK_DOCKER_IMAGE`) rather than on the
+host. The container uses `--network host` so there is no bridge/NAT overhead and
+the repo is bind-mounted so the benchmarked dependency versions match the ones
+reported in the results table. A working Docker daemon is therefore required,
+and `--network host` means Linux (or Docker Desktop with host networking
+enabled).
+
 #### Arguments
 
 * `-h`: Help on how to use the tool.
