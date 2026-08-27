@@ -12,6 +12,11 @@ import { compare } from './lib/autocannon.js'
 
 const resultsPath = join(process.cwd(), 'results')
 
+const PHASES = [
+  { key: 'get', title: '`GET /` — returns a small static JSON object' },
+  { key: 'post', title: '`POST /` — decodes the posted JSON object and echoes it back' }
+]
+
 program.option('-t, --table', 'print table')
   .option('-m --markdown', 'format table for markdown')
   .option('-u --update', 'update README.md')
@@ -23,21 +28,29 @@ if (opts.markdown || opts.update) {
   chalk.level = 0
 }
 
-if (!getAvailableResults().length) {
-  console.log(chalk.red('Benchmark to gather some results to compare.'))
-} else if (opts.update) {
-  updateReadme()
-} else if (opts.table) {
-  console.log(compareResults(opts.markdown))
-} else {
-  compareResultsInteractive()
+// Only results carrying both GET and POST numbers are usable; a stale file from
+// an older run (or a handler that failed this time) is skipped loudly so it
+// never reaches the table or the interactive picker.
+let resultsCache
+function getResults () {
+  if (resultsCache) return resultsCache
+  const results = []
+  for (const file of readdirSync(resultsPath).filter((f) => f.endsWith('.json')).sort()) {
+    const name = file.replace('.json', '')
+    const parsed = JSON.parse(readFileSync(`${resultsPath}/${file}`).toString())
+    if (!parsed.get || !parsed.post) {
+      console.log(chalk.yellow(`Skipping ${name}: no GET/POST results (stale format)`))
+      continue
+    }
+    parsed.server = parsed.server || name
+    results.push(parsed)
+  }
+  resultsCache = results
+  return results
 }
 
 function getAvailableResults () {
-  return readdirSync(resultsPath)
-    .filter((file) => file.match(/(.+)\.json$/))
-    .sort()
-    .map((choice) => choice.replace('.json', ''))
+  return getResults().map((result) => result.server)
 }
 
 function formatHasRouter (hasRouter) {
@@ -51,7 +64,7 @@ function updateReadme () {
 * __Machine:__ ${machineInfo}
 * __Node:__ \`${process.version}\`
 * __Run:__ ${new Date()}
-* __Method:__ \`autocannon -c 100 -d 40 -p 10 localhost:3000\` (two rounds; one to warm-up, one to measure)
+* __Method:__ \`autocannon -c 100 -d 40 -p 10 localhost:3000\`, measured separately for \`GET /\` (static JSON) and \`POST /\` (decodes a posted JSON object); two rounds each, one to warm up and one to measure
 
 ${compareResults(true)}
 `
@@ -59,8 +72,8 @@ ${compareResults(true)}
   writeFileSync('README.md', md.split('# Benchmarks', 1)[0] + benchmarkMd, 'utf8')
 }
 
-function compareResults (markdown) {
-  const tableStyle = !markdown
+function tableStyle (markdown) {
+  return !markdown
     ? {}
     : {
         chars: {
@@ -85,9 +98,21 @@ function compareResults (markdown) {
           head: []
         }
       }
+}
 
+function formatThroughput (throughput) {
+  return throughput ? (throughput / 1024 / 1024).toFixed(2) : 'N/A'
+}
+function formatRequests (requests) {
+  return requests ? requests.toFixed(1) : 'N/A'
+}
+function formatLatency (latency) {
+  return latency ? latency.toFixed(2) : 'N/A'
+}
+
+function renderPhase (results, phase, markdown) {
   const table = new Table({
-    ...tableStyle,
+    ...tableStyle(markdown),
     head: ['', 'Version', 'Router', 'Requests/s', 'Latency (ms)', 'Throughput/Mb']
   })
 
@@ -95,45 +120,71 @@ function compareResults (markdown) {
     table.push([':--', '--:', '--:', ':-:', '--:', '--:'])
   }
 
-  const results = getAvailableResults().map(file => {
-    const content = readFileSync(`${resultsPath}/${file}.json`)
-    return JSON.parse(content.toString())
-  }).sort((a, b) => parseFloat(b.requests.mean) - parseFloat(a.requests.mean))
+  const sorted = [...results].sort((a, b) => parseFloat(b[phase].requests.mean) - parseFloat(a[phase].requests.mean))
 
-  const outputResults = []
-  const formatThroughput = throughput => throughput ? (throughput / 1024 / 1024).toFixed(2) : 'N/A'
-
-  for (const result of results) {
+  for (const result of sorted) {
     const beBold = result.server === 'fastify'
     const { hasRouter, version } = info(result.server) || {}
     const {
       requests: { average: requests },
       latency: { average: latency },
       throughput: { average: throughput }
-    } = result
-
-    outputResults.push(
-      {
-        name: result.server,
-        version,
-        hasRouter,
-        requests: requests ? requests.toFixed(1) : 'N/A',
-        latency: latency ? latency.toFixed(2) : 'N/A',
-        throughput: formatThroughput(throughput)
-      }
-    )
+    } = result[phase]
 
     table.push([
       bold(beBold, chalk.blue(result.server)),
       bold(beBold, version),
       bold(beBold, formatHasRouter(hasRouter)),
-      bold(beBold, requests ? requests.toFixed(1) : 'N/A'),
-      bold(beBold, latency ? latency.toFixed(2) : 'N/A'),
-      bold(beBold, throughput ? (throughput / 1024 / 1024).toFixed(2) : 'N/A')
+      bold(beBold, formatRequests(requests)),
+      bold(beBold, formatLatency(latency)),
+      bold(beBold, formatThroughput(throughput))
     ])
   }
-  writeFileSync('benchmark-results.json', JSON.stringify(outputResults), 'utf8')
+
   return table.toString()
+}
+
+function phaseNumbers (phase) {
+  return {
+    requests: formatRequests(phase.requests.average),
+    latency: formatLatency(phase.latency.average),
+    throughput: formatThroughput(phase.throughput.average)
+  }
+}
+
+function writeBenchmarkResults (results) {
+  const outputResults = [...results]
+    .sort((a, b) => parseFloat(b.get.requests.mean) - parseFloat(a.get.requests.mean))
+    .map((result) => {
+      const { hasRouter, version } = info(result.server) || {}
+      const get = phaseNumbers(result.get)
+      const post = phaseNumbers(result.post)
+      return {
+        name: result.server,
+        version,
+        hasRouter,
+        // Flat fields remain the GET numbers for backwards compatibility.
+        requests: get.requests,
+        latency: get.latency,
+        throughput: get.throughput,
+        get,
+        post
+      }
+    })
+
+  writeFileSync('benchmark-results.json', JSON.stringify(outputResults), 'utf8')
+}
+
+function compareResults (markdown) {
+  const results = getResults()
+  writeBenchmarkResults(results)
+
+  return PHASES
+    .map(({ key, title }) => {
+      const heading = markdown ? `### ${title}\n\n` : `${title}\n`
+      return heading + renderPhase(results, key, markdown)
+    })
+    .join('\n\n')
 }
 
 async function compareResultsInteractive () {
@@ -170,11 +221,21 @@ async function compareResultsInteractive () {
   }
 
   console.log(`
- ${chalk.blue('Both are awesome but')} ${fastest} ${chalk.blue('is')} ${diff} ${chalk.blue('faster than')} ${slowest}
+ ${chalk.blue('Both are awesome but')} ${fastest} ${chalk.blue('is')} ${diff} ${chalk.blue('faster than')} ${slowest} ${chalk.blue('on GET')}
  • ${fastest} ${chalk.blue('request average is')} ${fastestAverage}
  • ${slowest} ${chalk.blue('request average is')} ${slowestAverage}`)
 }
 
 function bold (writeBold, str) {
   return writeBold ? chalk.bold(str) : str
+}
+
+if (!getAvailableResults().length) {
+  console.log(chalk.red('Benchmark to gather some results to compare.'))
+} else if (opts.update) {
+  updateReadme()
+} else if (opts.table) {
+  console.log(compareResults(opts.markdown))
+} else {
+  compareResultsInteractive()
 }

@@ -40,4 +40,10 @@ fastify.get('/', opts, function (_request, reply) {
   reply.send(jobs)
 })
 
+// This module exists to measure a large GET response; the POST route is a plain
+// JSON echo, so its numbers should track the plain `fastify` module closely.
+fastify.post('/', function (req, reply) {
+  reply.send(req.body)
+})
+
 fastify.listen({ port: 3000, host: '127.0.0.1' })

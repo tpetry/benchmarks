@@ -21,4 +21,8 @@ fastify.get('/', schema, function (_req, reply) {
   reply.send({ hello: 'world' })
 })
 
+fastify.post('/', schema, function (req, reply) {
+  reply.send(req.body)
+})
+
 fastify.listen({ port: 3000, host: '127.0.0.1' })

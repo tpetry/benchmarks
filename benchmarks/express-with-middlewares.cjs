@@ -14,9 +14,14 @@ app.use(require('hide-powered-by')())
 app.use(require('hsts')())
 app.use(require('ienoopen')())
 app.use(require('x-xss-protection')())
+app.use(express.json())
 
 app.get('/', function (_req, res) {
   res.json({ hello: 'world' })
+})
+
+app.post('/', function (req, res) {
+  res.json(req.body)
 })
 
 app.listen(3000)

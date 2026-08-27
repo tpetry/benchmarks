@@ -17,6 +17,12 @@ fastify.register(fastifyTRPCPlugin, {
   trpcOptions: { router: appRouter, createContext: () => {} }
 })
 
+// The POST benchmark uses a plain Fastify route (tRPC's own mutation transport
+// is batch/envelope-specific and not comparable to the other frameworks).
+fastify.post('/', function (req, reply) {
+  reply.send(req.body)
+})
+
 // Route URL is composed by prefix + query() first string param.
 // In this benchmark, assigning an empty string to both of them is a way for exposing URL "/".
 // A more realistic case would be having prefix="/trpc" and query('tasks'),

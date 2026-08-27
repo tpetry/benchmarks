@@ -75,6 +75,14 @@ image defaults to `docker.io/library/node:24` and can be overridden with
 `BENCHMARK_CONTAINER_IMAGE`. CI standardises on `docker` so the committed
 results stay comparable from run to run.
 
+Every module is benchmarked twice and reported in two tables:
+
+* **`GET /`** returns a small static JSON object.
+* **`POST /`** decodes the posted JSON object (`{"hello":"world"}`) and echoes it
+  back. Frameworks with zero-config body parsing (Fastify, Hono, Elysia, hapi,
+  micro, …) use their own; the rest share one minimal `JSON.parse` reader
+  (`benchmarks/_body.*`) so those rows stay comparable.
+
 #### Arguments
 
 * `-h`: Help on how to use the tool.

@@ -20,6 +20,21 @@ async function start () {
     }
   })
 
+  server.route({
+    method: 'POST',
+    path: '/',
+    config: {
+      cache: false,
+      response: {
+        ranges: false
+      },
+      state: { parse: false }
+    },
+    handler: function (request) {
+      return request.payload
+    }
+  })
+
   await server.start()
 }
 

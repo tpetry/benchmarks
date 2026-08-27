@@ -1,10 +1,13 @@
 'use strict'
 
 const http = require('node:http')
-const { serve } = require('micro')
+const { serve, json } = require('micro')
 
 const server = new http.Server(
-  serve(async function () {
+  serve(async function (req) {
+    if (req.method === 'POST') {
+      return json(req)
+    }
     return { hello: 'world' }
   })
 )
