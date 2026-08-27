@@ -161,45 +161,7 @@ function renderPhase (results, phase, markdown) {
   return table.toString()
 }
 
-function phaseNumbers (phase) {
-  return {
-    requests: formatRequests(phase.requests.average),
-    latency: formatLatency(phase.latency.average),
-    throughput: formatThroughput(phase.throughput.average)
-  }
-}
-
-// benchmark-results.json is keyed by engine: { docker: [ ...rows ], host: [...] }.
-function writeBenchmarkResults () {
-  const output = {}
-
-  for (const engine of enginesPresent()) {
-    output[engine] = [...resultsForEngine(engine)]
-      .sort((a, b) => parseFloat(b.get.requests.mean) - parseFloat(a.get.requests.mean))
-      .map((result) => {
-        const { hasRouter, version } = info(result.server) || {}
-        const get = phaseNumbers(result.get)
-        const post = phaseNumbers(result.post)
-        return {
-          name: result.server,
-          version,
-          hasRouter,
-          // Flat fields remain the GET numbers for backwards compatibility.
-          requests: get.requests,
-          latency: get.latency,
-          throughput: get.throughput,
-          get,
-          post
-        }
-      })
-  }
-
-  writeFileSync('benchmark-results.json', JSON.stringify(output), 'utf8')
-}
-
 function compareResults (markdown) {
-  writeBenchmarkResults()
-
   return enginesPresent()
     .map((engine) => {
       const rows = resultsForEngine(engine)

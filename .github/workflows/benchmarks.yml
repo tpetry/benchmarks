@@ -60,6 +60,6 @@ jobs:
         commit-message: 'chore: update benchmark results'
         force-add: 'true'
         rebase: 'true'
-        files: benchmark-results.json README.md
+        files: README.md
         name: Github Actions
         email: <>
