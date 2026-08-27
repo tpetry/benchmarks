@@ -17,6 +17,9 @@ const PHASES = [
   { key: 'post', title: '`POST /` — decodes the posted JSON object and echoes it back' }
 ]
 
+// Every engine we have saved data for is reported, in this order.
+const ENGINE_ORDER = ['docker', 'podman', 'host']
+
 program.option('-t, --table', 'print table')
   .option('-m --markdown', 'format table for markdown')
   .option('-u --update', 'update README.md')
@@ -28,29 +31,43 @@ if (opts.markdown || opts.update) {
   chalk.level = 0
 }
 
-// Only results carrying both GET and POST numbers are usable; a stale file from
-// an older run (or a handler that failed this time) is skipped loudly so it
-// never reaches the table or the interactive picker.
+// Result files are `results/<server>-<engine>.json`. Only files carrying both
+// GET and POST numbers and a known engine are usable; a stale file from an older
+// run (or a handler that failed this time) is skipped loudly so it never reaches
+// a table or the interactive picker.
 let resultsCache
 function getResults () {
   if (resultsCache) return resultsCache
   const results = []
   for (const file of readdirSync(resultsPath).filter((f) => f.endsWith('.json')).sort()) {
-    const name = file.replace('.json', '')
+    const name = file.replace(/\.json$/, '')
     const parsed = JSON.parse(readFileSync(`${resultsPath}/${file}`).toString())
-    if (!parsed.get || !parsed.post) {
-      console.log(chalk.yellow(`Skipping ${name}: no GET/POST results (stale format)`))
+    if (!parsed.get || !parsed.post || !parsed.engine) {
+      console.log(chalk.yellow(`Skipping ${name}: not a GET/POST result for a known engine (stale format)`))
       continue
     }
-    parsed.server = parsed.server || name
+    parsed.server = parsed.server || name.replace(new RegExp(`-${parsed.engine}$`), '')
     results.push(parsed)
   }
   resultsCache = results
   return results
 }
 
+// Engines we have data for, in ENGINE_ORDER first, then any others alphabetically.
+function enginesPresent () {
+  const present = new Set(getResults().map((result) => result.engine))
+  return [
+    ...ENGINE_ORDER.filter((engine) => present.has(engine)),
+    ...[...present].filter((engine) => !ENGINE_ORDER.includes(engine)).sort()
+  ]
+}
+
+function resultsForEngine (engine) {
+  return getResults().filter((result) => result.engine === engine)
+}
+
 function getAvailableResults () {
-  return getResults().map((result) => result.server)
+  return getResults().map((result) => `${result.server}-${result.engine}`)
 }
 
 function formatHasRouter (hasRouter) {
@@ -64,7 +81,7 @@ function updateReadme () {
 * __Machine:__ ${machineInfo}
 * __Node:__ \`${process.version}\`
 * __Run:__ ${new Date()}
-* __Method:__ \`autocannon -c 100 -d 40 -p 10 localhost:3000\`, measured separately for \`GET /\` (static JSON) and \`POST /\` (decodes a posted JSON object); two rounds each, one to warm up and one to measure
+* __Method:__ \`autocannon -c 100 -d 40 -p 10 localhost:3000\`, measured separately for \`GET /\` (static JSON) and \`POST /\` (decodes a posted JSON object); two rounds each, one to warm up and one to measure. One section per runtime the benchmark was run under (\`docker\`, \`podman\`, \`host\`).
 
 ${compareResults(true)}
 `
@@ -152,37 +169,48 @@ function phaseNumbers (phase) {
   }
 }
 
-function writeBenchmarkResults (results) {
-  const outputResults = [...results]
-    .sort((a, b) => parseFloat(b.get.requests.mean) - parseFloat(a.get.requests.mean))
-    .map((result) => {
-      const { hasRouter, version } = info(result.server) || {}
-      const get = phaseNumbers(result.get)
-      const post = phaseNumbers(result.post)
-      return {
-        name: result.server,
-        version,
-        hasRouter,
-        // Flat fields remain the GET numbers for backwards compatibility.
-        requests: get.requests,
-        latency: get.latency,
-        throughput: get.throughput,
-        get,
-        post
-      }
-    })
+// benchmark-results.json is keyed by engine: { docker: [ ...rows ], host: [...] }.
+function writeBenchmarkResults () {
+  const output = {}
 
-  writeFileSync('benchmark-results.json', JSON.stringify(outputResults), 'utf8')
+  for (const engine of enginesPresent()) {
+    output[engine] = [...resultsForEngine(engine)]
+      .sort((a, b) => parseFloat(b.get.requests.mean) - parseFloat(a.get.requests.mean))
+      .map((result) => {
+        const { hasRouter, version } = info(result.server) || {}
+        const get = phaseNumbers(result.get)
+        const post = phaseNumbers(result.post)
+        return {
+          name: result.server,
+          version,
+          hasRouter,
+          // Flat fields remain the GET numbers for backwards compatibility.
+          requests: get.requests,
+          latency: get.latency,
+          throughput: get.throughput,
+          get,
+          post
+        }
+      })
+  }
+
+  writeFileSync('benchmark-results.json', JSON.stringify(output), 'utf8')
 }
 
 function compareResults (markdown) {
-  const results = getResults()
-  writeBenchmarkResults(results)
+  writeBenchmarkResults()
 
-  return PHASES
-    .map(({ key, title }) => {
-      const heading = markdown ? `### ${title}\n\n` : `${title}\n`
-      return heading + renderPhase(results, key, markdown)
+  return enginesPresent()
+    .map((engine) => {
+      const rows = resultsForEngine(engine)
+      const header = markdown ? `## ${engine}` : `=== ${engine} ===`
+      const phases = PHASES
+        .map(({ key, title }) => {
+          const heading = markdown ? `### ${title}\n\n` : `${title}\n`
+          return heading + renderPhase(rows, key, markdown)
+        })
+        .join('\n\n')
+      return `${header}\n\n${phases}`
     })
     .join('\n\n')
 }

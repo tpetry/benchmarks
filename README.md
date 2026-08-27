@@ -57,23 +57,29 @@ Clone this repo. Then
 node ./benchmark [arguments (optional)]
 ```
 
-Each HTTP server under test is started inside a throwaway **container** rather
-than on the host. The container uses `--network host` so there is no bridge/NAT
-overhead, and the repo is bind-mounted so the benchmarked dependency versions
-match the ones reported in the results table.
-
-You must pick a container engine explicitly — there is no default:
+You must pick how the HTTP servers are run explicitly, via
+`BENCHMARK_CONTAINER_ENGINE` — there is no default:
 
 ```
-BENCHMARK_CONTAINER_ENGINE=docker  node ./benchmark   # or
-BENCHMARK_CONTAINER_ENGINE=podman  node ./benchmark
+BENCHMARK_CONTAINER_ENGINE=docker  node ./benchmark   # server in a container
+BENCHMARK_CONTAINER_ENGINE=podman  node ./benchmark   # server in a container
+BENCHMARK_CONTAINER_ENGINE=host    node ./benchmark   # server as a plain node child process
 ```
 
-The chosen engine must be on `PATH` and able to run `--network host` (Linux, or
-Docker Desktop / a Podman machine with host networking enabled). The runner
-image defaults to `docker.io/library/node:24` and can be overridden with
-`BENCHMARK_CONTAINER_IMAGE`. CI standardises on `docker` so the committed
-results stay comparable from run to run.
+* **`docker` / `podman`** — each server runs in a throwaway container. `--network
+  host` (so no bridge/NAT overhead) and the repo is bind-mounted, so the
+  container uses the same dependency versions `lib/packages.js` reports. The
+  engine must be on `PATH` and able to run `--network host` (Linux, or Docker
+  Desktop / a Podman machine with host networking enabled). The runner image
+  defaults to `docker.io/library/node:24`, overridable with
+  `BENCHMARK_CONTAINER_IMAGE`.
+* **`host`** — no isolation; the servers run directly on this machine the way the
+  benchmarks originally did. Fastest to run, but the numbers only compare with
+  other `host` runs on the same machine.
+
+Results are written per runtime to `results/<server>-<engine>.json`, and
+`benchmark compare` prints one section per engine it has data for. CI runs
+`docker` only, so the committed tables stay comparable from run to run.
 
 Every module is benchmarked twice and reported in two tables:
 
