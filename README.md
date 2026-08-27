@@ -57,13 +57,23 @@ Clone this repo. Then
 node ./benchmark [arguments (optional)]
 ```
 
-Each HTTP server under test is started inside a throwaway **Docker container**
-(image `node:24`, overridable with `BENCHMARK_DOCKER_IMAGE`) rather than on the
-host. The container uses `--network host` so there is no bridge/NAT overhead and
-the repo is bind-mounted so the benchmarked dependency versions match the ones
-reported in the results table. A working Docker daemon is therefore required,
-and `--network host` means Linux (or Docker Desktop with host networking
-enabled).
+Each HTTP server under test is started inside a throwaway **container** rather
+than on the host. The container uses `--network host` so there is no bridge/NAT
+overhead, and the repo is bind-mounted so the benchmarked dependency versions
+match the ones reported in the results table.
+
+You must pick a container engine explicitly — there is no default:
+
+```
+BENCHMARK_CONTAINER_ENGINE=docker  node ./benchmark   # or
+BENCHMARK_CONTAINER_ENGINE=podman  node ./benchmark
+```
+
+The chosen engine must be on `PATH` and able to run `--network host` (Linux, or
+Docker Desktop / a Podman machine with host networking enabled). The runner
+image defaults to `docker.io/library/node:24` and can be overridden with
+`BENCHMARK_CONTAINER_IMAGE`. CI standardises on `docker` so the committed
+results stay comparable from run to run.
 
 #### Arguments
 

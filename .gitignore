@@ -159,3 +159,6 @@ profile*
 
 # benchmark results
 results
+
+# Node version of the container image used to run the servers (written by lib/bench.js)
+.container-node-version

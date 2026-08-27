@@ -38,13 +38,14 @@ jobs:
     - name: Install dependencies
       run: npm i --ignore-scripts
 
-    # The HTTP servers run inside a Docker container (see lib/bench.js), not on
-    # the runner host. Host networking keeps the numbers free of bridge/NAT cost.
-    - name: Pull benchmark runner image
-      run: docker pull node:24
-
+    # The HTTP servers run inside a container (see lib/bench.js), not on the
+    # runner host: host networking keeps the numbers free of bridge/NAT cost.
+    # The engine is a required choice; CI standardises on Docker so the
+    # committed results stay comparable run to run.
     - name: Run benchmarks
       run: npm start y 100 10 40
+      env:
+        BENCHMARK_CONTAINER_ENGINE: docker
 
     - name: Compare results
       run: |
