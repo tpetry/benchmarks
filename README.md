@@ -71,7 +71,8 @@ BENCHMARK_CONTAINER_ENGINE=host    node ./benchmark   # server as a plain node c
   container uses the same dependency versions `lib/packages.js` reports. The
   engine must be on `PATH` and able to run `--network host` (Linux, or Docker
   Desktop / a Podman machine with host networking enabled). The runner image
-  defaults to `docker.io/library/node:24`, overridable with
+  defaults to `docker.io/library/node:24-trixie` (the `-trixie` tag because the
+  uWebSockets.js binaries need glibc 2.38+), overridable with
   `BENCHMARK_CONTAINER_IMAGE`.
 * **`host`** — no isolation; the servers run directly on this machine the way the
   benchmarks originally did. Fastest to run, but the numbers only compare with
